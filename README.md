@@ -204,12 +204,43 @@ The A365 channel uses **Federated Identity Credentials (FIC)** via the Agentic B
 
 ### T1/T2/Agent Token Flow
 
-```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│   T1 Token      │────▶│   T2 Token      │────▶│  Agent Token    │
-│ (client_creds   │     │ (jwt-bearer     │     │ (user_fic for   │
-│  + fmi_path)    │     │  assertion)     │     │  agent identity)│
-└─────────────────┘     └─────────────────┘     └─────────────────┘
+```mermaid
+sequenceDiagram
+    participant Agent as OpenClaw Agent
+    participant Cache as Token Cache<br/>(in-memory)
+    participant CB as External Token<br/>Callback Service
+    participant AAD as Entra ID<br/>(login.microsoftonline.com)
+    participant Graph as Microsoft Graph API
+
+    Agent->>Cache: Check token for username|scope
+    alt Cache hit (expires > now + 5min)
+        Cache-->>Agent: Cached access token
+    else Cache miss or expired
+
+        alt Token Callback configured
+            Agent->>CB: POST {username, scope}<br/>+ Bearer callbackToken
+            CB-->>Agent: {access_token, expires_at}
+            Note over Agent,CB: If callback fails,<br/>falls through to T1/T2
+        end
+
+        rect rgb(240, 248, 255)
+            Note over Agent,AAD: T1/T2/User FIC Flow (Federated Identity Credentials)
+
+            Agent->>AAD: Step 1 — T1 Token<br/>grant_type=client_credentials<br/>client_id=blueprintClientAppId<br/>client_secret=blueprintClientSecret<br/>scope=api://AzureAdTokenExchange/.default<br/>fmi_path=aaInstanceId
+            AAD-->>Agent: T1 access_token
+
+            Agent->>AAD: Step 2 — T2 Token<br/>grant_type=client_credentials<br/>client_id=aaInstanceId<br/>client_assertion_type=jwt-bearer<br/>client_assertion=T1 token<br/>scope=api://AzureAdTokenExchange/.default
+            AAD-->>Agent: T2 access_token
+
+            Agent->>AAD: Step 3 — Agent Token<br/>grant_type=user_fic<br/>client_id=aaInstanceId<br/>client_assertion=T1 token<br/>username=agent@contoso.com<br/>user_federated_identity_credential=T2 token<br/>scope=https://graph.microsoft.com/.default
+            AAD-->>Agent: User FIC access_token + expires_in
+        end
+
+        Agent->>Cache: Store token (key: username|scope)
+    end
+
+    Agent->>Graph: API call with Bearer token
+    Graph-->>Agent: Response
 ```
 
 The agent authenticates using its own identity (`AGENT_IDENTITY`), then accesses resources that have been shared with it (e.g., the owner's calendar).
