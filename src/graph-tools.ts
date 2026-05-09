@@ -547,7 +547,7 @@ async function deleteCalendarEvent(
 async function sendEmail(
   cfg: A365Config | undefined,
   params: {
-    userId: string;
+    userId?: string;
     to: string[];
     subject: string;
     body: string;
@@ -556,7 +556,11 @@ async function sendEmail(
     importance?: "low" | "normal" | "high";
   },
 ): Promise<ToolResult> {
-  const { userId, to, subject, body, cc = [], bcc = [], importance = "normal" } = params;
+  const { to, subject, body, cc = [], bcc = [], importance = "normal" } = params;
+  const userId = params.userId || cfg?.agentIdentity || "";
+  if (!userId) {
+    return { isError: true, content: [{ type: "text", text: "No sender identity available (agentIdentity not configured)" }] };
+  }
 
   // Validate inputs
   const userIdCheck = validateUserId(userId);
@@ -876,9 +880,9 @@ export function createGraphTools(cfg?: A365Config): AgentTool<TSchema, unknown>[
     {
       name: "send_email",
       label: "Send Email",
-      description: "Send an email using Microsoft Graph.",
+      description: "Send an email using Microsoft Graph. Defaults to sending from the agent's own mailbox; only pass userId to send from a different mailbox you have Send-As rights on.",
       parameters: Type.Object({
-        userId: Type.String({ description: "Sender's email or ID (must have send permissions)" }),
+        userId: Type.Optional(Type.String({ description: "Sender's email or ID. Defaults to the agent identity." })),
         to: Type.Array(Type.String(), { description: "List of recipient email addresses" }),
         subject: Type.String({ description: "Email subject" }),
         body: Type.String({ description: "Email body content" }),
