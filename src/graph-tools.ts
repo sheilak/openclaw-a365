@@ -4,6 +4,7 @@ import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
 import type { A365Config, GraphCalendarEvent } from "./types.js";
 import { getGraphToken } from "./token.js";
 import { getA365Runtime } from "./runtime.js";
+import { ExecuteToolScope } from "@microsoft/opentelemetry";
 
 const GRAPH_BASE_URL = "https://graph.microsoft.com/v1.0";
 const DEFAULT_TIMEZONE = "UTC";
@@ -920,5 +921,38 @@ export function createGraphTools(cfg?: A365Config): AgentTool<TSchema, unknown>[
     });
   }
 
-  return tools;
+  return tools.map((tool) => ({
+    ...tool,
+    execute: async (toolCallId: string, params: unknown) => {
+      const scope = ExecuteToolScope.start(
+        {},
+        {
+          toolName: tool.name,
+          toolCallId,
+          arguments: (params ?? undefined) as Record<string, unknown> | undefined,
+        },
+        {
+          agentId: cfg?.graph?.aaInstanceId || cfg?.agentIdentity || "",
+          agentEmail: cfg?.agentIdentity,
+          tenantId: cfg?.tenantId,
+        },
+      );
+      try {
+        return await scope.withActiveSpanAsync(async () => {
+          const result = await tool.execute(toolCallId, params);
+          try {
+            scope.recordResponse(result as Record<string, unknown>);
+          } catch {
+            // best-effort
+          }
+          return result;
+        });
+      } catch (err) {
+        scope.recordError(err as Error);
+        throw err;
+      } finally {
+        scope.dispose();
+      }
+    },
+  }));
 }

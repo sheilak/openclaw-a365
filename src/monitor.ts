@@ -5,6 +5,14 @@ import { runWithGraphToolContext } from "./graph-tools.js";
 import { resolveA365Credentials } from "./token.js";
 import { saveConversationReference } from "./conversation-store.js";
 import { setAdapter, setBlueprintClientId } from "./adapter-store.js";
+import { InvokeAgentScope, OutputScope, BaggageMiddleware } from "@microsoft/opentelemetry";
+import type { A365SpanDetails, OutputResponse } from "@microsoft/opentelemetry";
+import { defaultObservabilityConfigurationProvider } from "@microsoft/agents-a365-observability";
+import { preloadObservabilityToken } from "./observability.js";
+
+const getObservabilityScopes = (): string[] => [
+  ...defaultObservabilityConfigurationProvider.getConfiguration().observabilityAuthenticationScopes,
+];
 
 export type MonitorA365Opts = {
   cfg: OpenClawConfig;
@@ -141,11 +149,19 @@ export async function monitorA365Provider(opts: MonitorA365Opts): Promise<Monito
   type ApplicationTurnState = typeof TurnState;
 
   // Create the Agent Application
-  // Note: We use our own T1/T2/User token flow for Graph API access,
-  // not the SDK's built-in authorization
+  // Authorization is wired so AgenticTokenCacheInstance.refreshObservabilityToken
+  // can call agentApp.authorization.exchangeToken("agentic", ...) to obtain the
+  // observability token. Graph API access still uses our own T1/T2/User flow
+  // via token.ts.
   const storage = new MemoryStorage();
   const agentApp = new AgentApplication<ApplicationTurnState>({
     storage,
+    authorization: {
+      agentic: {
+        type: "AgenticUserAuthorization",
+        scopes: getObservabilityScopes(),
+      },
+    },
   });
 
   // Note: We use our own T1/T2/User token flow for Graph API access via token.ts,
@@ -180,6 +196,44 @@ export async function monitorA365Provider(opts: MonitorA365Opts): Promise<Monito
         isGroup: metadata.isGroup,
         textLength: text.length,
       });
+
+      // Preload the observability token into AgenticTokenCacheInstance so the
+      // exporter's tokenResolver (which is a sync cache lookup) finds a token.
+      // Per Agent365-Samples design.md: refresh per-turn before invoking the
+      // agent, using agentic identity from activity.recipient.
+      const obsAgentId =
+        (activity.recipient as { agenticAppId?: string } | undefined)?.agenticAppId ??
+        a365Cfg?.graph?.aaInstanceId ??
+        "";
+      const obsTenantId = activity.recipient?.tenantId ?? creds.tenantId ?? "";
+      try {
+        await preloadObservabilityToken(
+          obsAgentId,
+          obsTenantId,
+          context,
+          agentApp.authorization,
+          getObservabilityScopes(),
+        );
+      } catch (err) {
+        log.warn(
+          `preloadObservabilityToken failed: agentId=${obsAgentId} tenantId=${obsTenantId} error=${err instanceof Error ? err.message : String(err)}`,
+        );
+        console.warn("[a365] preloadObservabilityToken failed:", err);
+      }
+
+      const invokeScope = InvokeAgentScope.start(
+        { content: text },
+        {},
+        {
+          agentId: a365Cfg?.graph?.aaInstanceId || a365Cfg?.agentIdentity || creds.appId,
+          agentEmail: a365Cfg?.agentIdentity,
+          tenantId: creds.tenantId,
+        },
+      );
+
+      try {
+        await invokeScope.withActiveSpanAsync(async () => {
+          invokeScope.recordInputMessages(text);
 
       // Store conversation reference from this AU-based request for proactive messaging.
       // The SDK's getConversationReference() preserves agentic identity metadata
@@ -278,12 +332,14 @@ export async function monitorA365Provider(opts: MonitorA365Opts): Promise<Monito
           // The Agents SDK context is only valid during the handler, so we must await all sends
           let replyCount = 0;
           const pendingSends: Promise<void>[] = [];
+          const collectedReplies: string[] = [];
 
           const sendReply = async (replyText: string) => {
             try {
               log.debug("sendReply called", { length: replyText.length });
               const result = await context.sendActivity(replyText);
               replyCount++;
+              collectedReplies.push(replyText);
               log.debug("reply sent successfully", { replyCount, resultId: result?.id });
             } catch (sendErr) {
               const err = sendErr as Error;
@@ -358,6 +414,30 @@ export async function monitorA365Provider(opts: MonitorA365Opts): Promise<Monito
 
             log.info("dispatch complete", { queuedFinal, textCount: counts?.text ?? 0, repliesSent: replyCount });
 
+            // Emit OutputScope so the agent's reply text(s) are reported to A365
+            // observability. Must run inside the InvokeAgentScope active span so
+            // parentContext links output → invoke.
+            if (collectedReplies.length > 0) {
+              try {
+                const parentContext = invokeScope.getSpanContext();
+                const response: OutputResponse = { messages: collectedReplies };
+                const outputScope = OutputScope.start(
+                  { content: text },
+                  response,
+                  {
+                    agentId: a365Cfg?.graph?.aaInstanceId || a365Cfg?.agentIdentity || creds.appId,
+                    agentEmail: a365Cfg?.agentIdentity,
+                    tenantId: creds.tenantId,
+                  },
+                  undefined,
+                  { parentContext } as A365SpanDetails,
+                );
+                outputScope.dispose();
+              } catch (outErr) {
+                log.warn(`OutputScope emit failed: ${String(outErr)}`);
+              }
+            }
+
             // Update the main session's lastChannel/lastTo for cron delivery support.
             try {
               const storePath = core.channel.session.resolveStorePath(cfg.session?.store);
@@ -387,12 +467,23 @@ export async function monitorA365Provider(opts: MonitorA365Opts): Promise<Monito
           }
         },
       );
+        });
+      } catch (err) {
+        invokeScope.recordError(err as Error);
+        throw err;
+      } finally {
+        invokeScope.dispose();
+      }
     },
   );
 
   // Store the adapter for proactive messaging
   const { CloudAdapter } = await import("@microsoft/agents-hosting");
   const adapter = (agentApp.adapter ?? new CloudAdapter()) as InstanceType<typeof CloudAdapter>;
+  // Propagate Bot Framework activity metadata into OTel baggage so spans get
+  // gen_ai.conversation.id, user.id, microsoft.channel.name, etc. — the A365
+  // portal needs these for span correlation/display.
+  (adapter as unknown as { use: (m: unknown) => void }).use(new BaggageMiddleware());
   setAdapter(adapter);
 
   // Store the Blueprint Client App ID — continueConversation must be called with

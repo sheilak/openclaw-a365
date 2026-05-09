@@ -2,6 +2,7 @@ import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import { emptyPluginConfigSchema } from "openclaw/plugin-sdk";
 import { a365Plugin } from "./src/channel.js";
 import { setA365Runtime } from "./src/runtime.js";
+import { initObservability } from "./src/observability.js";
 
 // Re-export monitor for external use
 export { monitorA365Provider } from "./src/monitor.js";
@@ -25,6 +26,7 @@ const plugin = {
   register(api: OpenClawPluginApi) {
     setA365Runtime(api.runtime);
     api.registerChannel({ plugin: a365Plugin });
+    initObservability();
   },
 };
 

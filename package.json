@@ -14,10 +14,13 @@
   },
   "dependencies": {
     "@azure/msal-node": "^2.16.2",
+    "@microsoft/agents-a365-observability": "^1.0.0",
     "@microsoft/agents-activity": "^1.1.0",
     "@microsoft/agents-hosting": "^1.1.0",
     "@microsoft/agents-hosting-express": "^1.1.0",
     "@microsoft/microsoft-graph-client": "^3.0.7",
+    "@microsoft/opentelemetry": "^1.0.1",
+    "@opentelemetry/resources": "^2.7.1",
     "@sinclair/typebox": "^0.34.49"
   },
   "openclaw": {
