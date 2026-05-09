@@ -143,12 +143,12 @@ async function graphRequest<T>(
       return { ok: false, error: errorMessage, status: response.status };
     }
 
-    // Handle 204 No Content
-    if (response.status === 204) {
+    // Handle empty bodies (204 No Content, 202 Accepted from sendMail, etc.)
+    const text = await response.text();
+    if (!text) {
       return { ok: true, data: {} as T };
     }
-
-    const data = await response.json() as T;
+    const data = JSON.parse(text) as T;
     return { ok: true, data };
   } catch (err) {
     log.error("Graph API network error", { error: String(err) });
