@@ -1,17 +1,9 @@
 import type { ChannelPlugin, OpenClawConfig } from "openclaw/plugin-sdk";
 import { DEFAULT_ACCOUNT_ID } from "openclaw/plugin-sdk";
 import type { A365Config, A365Probe, ResolvedA365Account } from "./types.js";
-import { resolveA365Credentials, resolveGraphTokenConfig, resolveTokenCallbackConfig, getGraphToken } from "./token.js";
-import { createGraphTools } from "./graph-tools.js";
+import { resolveA365Credentials } from "./token.js";
+import { getCachedMcpTools } from "./mcp-tools.js";
 import { a365Outbound, normalizeA365MessagingTarget } from "./outbound.js";
-
-/**
- * Check if Graph API tools can be enabled.
- * Requires either T1/T2 flow config or external token callback.
- */
-function isGraphConfigured(cfg?: A365Config): boolean {
-  return Boolean(resolveGraphTokenConfig(cfg) || resolveTokenCallbackConfig(cfg));
-}
 
 const meta = {
   id: "a365",
@@ -19,7 +11,7 @@ const meta = {
   selectionLabel: "Microsoft 365 Agents (A365)",
   docsPath: "/channels/a365",
   docsLabel: "a365",
-  blurb: "Native A365 channel with Graph API tools for calendar and email.",
+  blurb: "Native A365 channel with MCP-discovered tools for Microsoft 365 actions.",
   aliases: ["m365agents", "agents365"],
   order: 55,
 } as const;
@@ -33,23 +25,13 @@ async function probeA365(cfg?: A365Config): Promise<A365Probe> {
     return { ok: false, error: "Bot Framework credentials not configured" };
   }
 
-  // Check if Graph API is configured
-  const graphConfigured = isGraphConfigured(cfg);
-  let graphConnected = false;
-
-  if (graphConfigured && cfg?.agentIdentity) {
-    try {
-      const token = await getGraphToken(cfg, cfg.agentIdentity);
-      graphConnected = Boolean(token);
-    } catch {
-      graphConnected = false;
-    }
-  }
+  const mcpTools = getCachedMcpTools();
 
   return {
     ok: true,
     botId: creds.appId,
-    graphConnected,
+    mcpDiscovered: mcpTools.length > 0,
+    mcpToolCount: mcpTools.length,
     owner: cfg?.owner,
   };
 }
@@ -95,15 +77,11 @@ export const a365Plugin: ChannelPlugin<ResolvedA365Account, A365Probe> = {
 
       const hints = [
         "- A365 channel supports direct messages and channel conversations.",
-        "- Use Graph API tools (get_calendar_events, create_calendar_event, etc.) for calendar operations.",
+        "- MCP tools (prefixed `mcp__`) are discovered dynamically and may include Microsoft 365 actions (calendar, mail, etc.) depending on tenant configuration.",
         `- Current date/time: ${currentDateTime} (${timezone}). Today's date in ISO format: ${dateOnly}.`,
       ];
       if (a365Cfg?.owner) {
         hints.push(`- Default calendar owner: ${a365Cfg.owner}`);
-      }
-      const klipyKey = a365Cfg?.klipyApiKey || process.env.KLIPY_API_KEY;
-      if (klipyKey) {
-        hints.push("- You have a send_gif tool to send animated GIFs inline. Use it sparingly and only when it genuinely fits the moment — celebrations, humor, greetings, empathy. Do NOT use it on every message. Never use it when delivering bad news or discussing serious matters.");
       }
       return hints;
     },
@@ -241,15 +219,9 @@ export const a365Plugin: ChannelPlugin<ResolvedA365Account, A365Probe> = {
     },
     listGroups: async () => [],
   },
-  // Register Graph API tools for agent use
-  agentTools: ({ cfg }) => {
-    const a365Cfg = cfg?.channels?.a365 as A365Config | undefined;
-    // Only provide tools if Graph API is configured (T1/T2 flow or callback)
-    if (!isGraphConfigured(a365Cfg)) {
-      return [];
-    }
-    return createGraphTools(a365Cfg);
-  },
+  // MCP tools discovered lazily on the first turn (see monitor.ts).
+  // The factory is sync; we return whatever the module-level cache holds.
+  agentTools: () => getCachedMcpTools(),
   outbound: a365Outbound,
   status: {
     defaultRuntime: {

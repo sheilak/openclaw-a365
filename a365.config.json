@@ -1,0 +1,9 @@
+{
+  "tenantId": "c6060175-264f-4c1b-8dac-78b93364b24a",
+  "clientAppId": "0b6324c6-2416-4f7f-81b2-345c05cfe3a8",
+  "agentIdentityDisplayName": "sheilaclaw Identity",
+  "agentBlueprintDisplayName": "sheilaclaw Blueprint",
+  "agentDescription": "sheilaclaw",
+  "aiTeammate": false,
+  "useBlueprint": true
+}

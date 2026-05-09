@@ -14,29 +14,12 @@ export type A365Config = {
     /** Port for the Bot Framework webhook server (default: 3978) */
     port?: number;
   };
-  /** Graph API configuration for T1/T2/User flow (Federated Identity Credentials) */
+  /** Graph/AA configuration retained for observability + proactive messaging */
   graph?: {
-    /** Blueprint Client App ID (typically same as Bot App ID) */
+    /** Blueprint Client App ID — used as continueConversation client id */
     blueprintClientAppId?: string;
-    /** Blueprint Client Secret (typically same as Bot App Password) */
-    blueprintClientSecret?: string;
-    /** AA Instance ID (Agent Application Instance ID) - required for user_fic flow */
+    /** AA Instance ID — used as observability/invoke agentId */
     aaInstanceId?: string;
-    /** OAuth scope for Graph API */
-    scope?: string;
-    /** @deprecated Use blueprintClientAppId instead */
-    clientId?: string;
-    /** @deprecated Use blueprintClientSecret instead */
-    clientSecret?: string;
-    /** @deprecated Use main tenantId instead */
-    tenantId?: string;
-  };
-  /** External token callback service (alternative to T1/T2 flow) */
-  tokenCallback?: {
-    /** URL of the token service endpoint */
-    url?: string;
-    /** Bearer token for authenticating with the token service */
-    token?: string;
   };
   /** Email of the person this agent supports (the "principal") */
   owner?: string;
@@ -60,8 +43,6 @@ export type A365Config = {
   groupAllowFrom?: Array<string | number>;
   /** Group policy */
   groupPolicy?: string;
-  /** Klipy API key for GIF search (https://partner.klipy.com/api-keys) */
-  klipyApiKey?: string;
 };
 
 /**
@@ -81,7 +62,8 @@ export type A365Probe = {
   ok: boolean;
   botId?: string;
   botName?: string;
-  graphConnected?: boolean;
+  mcpDiscovered?: boolean;
+  mcpToolCount?: number;
   owner?: string;
   error?: string;
 };
@@ -196,50 +178,3 @@ export type StoredConversationReference = {
   updatedAt: number;
 };
 
-/**
- * Graph API calendar event.
- */
-export type GraphCalendarEvent = {
-  id?: string;
-  subject: string;
-  start: {
-    dateTime: string;
-    timeZone: string;
-  };
-  end: {
-    dateTime: string;
-    timeZone: string;
-  };
-  attendees?: Array<{
-    emailAddress: {
-      address: string;
-      name?: string;
-    };
-    type?: string;
-    status?: {
-      response?: string;
-      time?: string;
-    };
-  }>;
-  location?: {
-    displayName?: string;
-  };
-  body?: {
-    contentType?: string;
-    content?: string;
-  };
-  isOnlineMeeting?: boolean;
-  onlineMeetingUrl?: string;
-  organizer?: {
-    emailAddress: {
-      address: string;
-      name?: string;
-    };
-  };
-  showAs?: string;
-  importance?: string;
-  sensitivity?: string;
-  isAllDay?: boolean;
-  isCancelled?: boolean;
-  responseRequested?: boolean;
-};

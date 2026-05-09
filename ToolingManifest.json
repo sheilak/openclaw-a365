@@ -1,0 +1,41 @@
+{
+  "mcpServers": [
+    {
+      "mcpServerName": "mcp_MailTools",
+      "mcpServerUniqueName": "mcp_MailTools",
+      "url": "https://agent365.svc.cloud.microsoft/agents/servers/mcp_MailTools",
+      "scope": "McpServers.Mail.All",
+      "audience": "ea9ffc3e-8a23-4a7d-836d-234d7c7565c1"
+    },
+		{
+			"mcpServerName": "mcp_CalendarTools",
+			"mcpServerUniqueName": "mcp_CalendarTools",
+			"scope": "McpServers.Calendar.All",
+			"audience": "api://ea9ffc3e-8a23-4a7d-836d-234d7c7565c1"
+		},
+		{
+			"mcpServerName": "mcp_TeamsServer",
+			"mcpServerUniqueName": "mcp_TeamsServer",
+			"scope": "McpServers.Teams.All",
+			"audience": "api://ea9ffc3e-8a23-4a7d-836d-234d7c7565c1"
+		},
+		{
+			"mcpServerName": "mcp_MeServer",
+			"mcpServerUniqueName": "mcp_MeServer",
+			"scope": "McpServers.Me.All",
+			"audience": "api://ea9ffc3e-8a23-4a7d-836d-234d7c7565c1"
+		},
+		{
+			"mcpServerName": "mcp_WordServer",
+			"mcpServerUniqueName": "mcp_WordServer",
+			"scope": "McpServers.Word.All",
+			"audience": "api://ea9ffc3e-8a23-4a7d-836d-234d7c7565c1"
+		},
+		{
+			"mcpServerName": "mcp_M365Copilot",
+			"mcpServerUniqueName": "mcp_M365Copilot",
+			"scope": "McpServers.CopilotMCP.All",
+			"audience": "api://ea9ffc3e-8a23-4a7d-836d-234d7c7565c1"
+		}
+  ]
+}

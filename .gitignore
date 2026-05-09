@@ -6,6 +6,9 @@
 # OpenClaw runtime data
 .openclaw/
 
+# A365 generated config (contains protected client secret)
+a365.generated.config.json
+
 # Node
 node_modules/
 *.log
