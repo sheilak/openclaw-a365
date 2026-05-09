@@ -1,6 +1,18 @@
 {
   "id": "a365",
   "channels": ["a365"],
+  "channelConfigs": {
+    "a365": {
+      "configPath": "channels.a365",
+      "schema": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "enabled": { "type": "boolean" }
+        }
+      }
+    }
+  },
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
