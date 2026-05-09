@@ -293,11 +293,18 @@ export const a365Plugin: ChannelPlugin<ResolvedA365Account, A365Probe> = {
       const port = a365Cfg?.webhook?.port ?? 3978;
       ctx.setStatus({ accountId: ctx.accountId, port });
       ctx.log?.info(`starting a365 provider (port ${port})`);
-      return monitorA365Provider({
+      const result = await monitorA365Provider({
         cfg: ctx.cfg,
         runtime: ctx.runtime,
         abortSignal: ctx.abortSignal,
       });
+      if (ctx.abortSignal && !ctx.abortSignal.aborted) {
+        await new Promise<void>((resolve) => {
+          ctx.abortSignal!.addEventListener("abort", () => resolve(), { once: true });
+        });
+      }
+      await result.shutdown();
+      return result;
     },
   },
 };
