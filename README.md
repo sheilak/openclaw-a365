@@ -93,6 +93,78 @@ docker-compose up -d
 
 </details>
 
+---
+
+## Running without Docker (local dev)
+
+The published Docker image lags upstream openclaw and may not work against the latest gateway. To run from source on a host that already has Node 20+ and pnpm:
+
+```bash
+git clone https://github.com/sheilak/openclaw-a365.git
+cd openclaw-a365
+pnpm install --node-linker=hoisted   # hoisted layout: gateway rejects symlinked plugins
+pnpm build                           # tsc -> dist/
+pnpm openclaw plugins install . --force
+```
+
+Then edit `~/.openclaw/openclaw.json` to add the bits the plugin install doesn't manage. Minimum shape:
+
+```jsonc
+{
+  "gateway": {
+    "mode": "local",
+    "auth": { "mode": "token", "token": "<random hex>" }
+  },
+  "channels": {
+    "a365": {
+      "enabled": true,
+      "appId": "...", "appPassword": "...", "tenantId": "...",
+      "agentIdentity": "agent@contoso.onmicrosoft.com",
+      "owner": "you@contoso.onmicrosoft.com",
+      "ownerAadId": "...",
+      "graph": { "aaInstanceId": "..." },
+      "webhook": { "port": 3978 },
+      "dmPolicy": "pairing"
+    }
+  },
+  "plugins": { "entries": { "a365": { "enabled": true } } }
+}
+```
+
+If you're using Azure OpenAI / Microsoft Foundry, also add a provider block so the model resolves:
+
+```jsonc
+{
+  "agents": {
+    "defaults": { "model": { "primary": "microsoft-foundry/<deployment>" } }
+  },
+  "models": {
+    "providers": {
+      "microsoft-foundry": {
+        "baseUrl": "https://<resource>.cognitiveservices.azure.com/openai/v1",
+        "models": [{ "id": "<deployment>", "name": "<model-name>" }]
+      }
+    }
+  }
+}
+```
+
+Set `AZURE_OPENAI_API_KEY` in your environment and start the gateway:
+
+```bash
+pnpm openclaw gateway
+```
+
+Expose port 3978 with devtunnel (or ngrok) and register the public `/api/messages` URL as your A365 agent's messaging endpoint:
+
+```bash
+devtunnel host -p 3978 -a   # -a = anonymous access; required for Bot Framework
+```
+
+A `POST /api/messages` with no auth should return `HTTP 401 {"jwt-auth-error":"..."}` — that's the expected response for unauthenticated probes and means the channel is up.
+
+---
+
 ## Model Configuration
 
 Configure which LLM model to use via environment variables:
